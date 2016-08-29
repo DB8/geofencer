@@ -11,21 +11,21 @@ class ViewController: UIViewController, MKMapViewDelegate {
 
     let diskStore = DiskStore()
 
-    var previousGeofences:[Geofence] = [] {
+    var regions:[Region] = [] {
         didSet {
-            for geofence in oldValue {
-                mapView.removeOverlay(geofence.circle)
-                mapView.removeAnnotation(geofence.circle)
+            for region in oldValue {
+                region.overlays.forEach({ mapView.removeOverlay($0) })
+                region.annotations.forEach({ mapView.removeAnnotation($0) })
             }
 
-            for geofence in previousGeofences {
-                mapView.addOverlay(geofence.circle)
-                mapView.addAnnotation(geofence.circle)
+            for region in regions {
+                region.overlays.forEach({ mapView.addOverlay($0) })
+                region.annotations.forEach({ mapView.addAnnotation($0) })
             }
 
-            shareButton.enabled = (previousGeofences.count > 0)
-            resetButton.enabled = (previousGeofences.count > 0)
-            diskStore.save(previousGeofences)
+            shareButton.enabled = (regions.count > 0)
+            resetButton.enabled = (regions.count > 0)
+            diskStore.save(regions)
         }
 
     }
@@ -59,8 +59,8 @@ class ViewController: UIViewController, MKMapViewDelegate {
                 self.dismissViewControllerAnimated(true, completion: nil)
 
                 if let title = alert.textFields?.first?.text {
-                    let geofence = Geofence(points:[first.coordinate, second.coordinate], title: title)
-                    self.previousGeofences.append(geofence)
+                    let circle = CircularRegion(points:[first.coordinate, second.coordinate], title: title)
+                    self.regions.append(circle)
 
                     self.resetCurrentRegion()
                 }
@@ -79,7 +79,7 @@ class ViewController: UIViewController, MKMapViewDelegate {
         alert.addAction(UIAlertAction(title: "Yes", style: .Default, handler: { (action) in
             self.dismissViewControllerAnimated(true, completion: nil)
 
-            self.previousGeofences = []
+            self.regions = []
             self.first = nil
             self.second = nil
             self.circle = nil
@@ -93,7 +93,7 @@ class ViewController: UIViewController, MKMapViewDelegate {
     }
 
     @IBAction func didTapShareButton(sender: AnyObject) {
-        let json = Geofence.listAsJSON(self.previousGeofences)
+        let json = regionsAsJSON(self.regions)
         let activityViewController = UIActivityViewController(activityItems: [json as NSString], applicationActivities: nil)
         presentViewController(activityViewController, animated: true, completion: nil)
     }
@@ -105,7 +105,7 @@ class ViewController: UIViewController, MKMapViewDelegate {
         mapView.showsUserLocation = true
         mapView.setUserTrackingMode(.FollowWithHeading, animated: true)
 
-        previousGeofences = diskStore.load()
+        regions = diskStore.load()
     }
 
     // -
@@ -164,7 +164,7 @@ class ViewController: UIViewController, MKMapViewDelegate {
                 mapView.removeAnnotation(circle)
             }
 
-            circle = Geofence.circleFromPoints(first.coordinate, second.coordinate)
+            circle = CircularRegion.circleFromPoints(first.coordinate, second.coordinate)
 
             if let circle = circle {
                 circle.title = "Current Region"
@@ -236,14 +236,14 @@ class ViewController: UIViewController, MKMapViewDelegate {
     func mapView(mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
         if (!view.annotation!.isKindOfClass(MKCircle.self)) { return }
             if let circle = view.annotation as? MKCircle {
-                if let index = self.previousGeofences.indexOf({ $0.circle == circle }) {
-                    let geofence = self.previousGeofences[index]
-                    self.previousGeofences.removeAtIndex(index)
+                if let index = self.regions.indexOf({ $0.annotations == [circle] }) {
+                    let region = self.regions[index]
+                    self.regions.removeAtIndex(index)
 
                     self.circle = nil
-                    replaceFirstWithCoordinate(geofence.points[0])
-                    replaceSecondWithCoordinate(geofence.points[1])
-                    self.title = geofence.title
+                    replaceFirstWithCoordinate(region.points[0])
+                    replaceSecondWithCoordinate(region.points[1])
+                    self.title = region.title
                 } else {
                     self.resetCurrentRegion()
                 }
